@@ -924,24 +924,24 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Decrypt NT/LM password hashes using boot key components.')
 
     group = parser.add_mutually_exclusive_group(required=True)
-    group.add_argument('--reg', help='HKLM\\SAM registry export file (non-binary .reg format)')
-    group.add_argument('--sys32-config',
-                       help='Path to Windows\\System32\\config directory (the target system should not be currently booted)')
+    group.add_argument('--reg', help='Path to the HKLM\\SAM registry export file (non-binary .reg format)')
+    group.add_argument('--hive',
+                       help='Path to a directory containing SAM and SYSTEM hives (e.g. %%systemroot%%\\System32\\config), must not be in use')
 
-    parser.add_argument('--jd', help='LSA\\JD class name')
-    parser.add_argument('--skew1', help='LSA\\Skew1 class name')
-    parser.add_argument('--gbg', help='LSA\\GBG class name')
-    parser.add_argument('--data', help='LSA\\Data key class name')
-    parser.add_argument('--pw', help='Custom password to hash & encrypt')
+    parser.add_argument('--jd', help='JD class name (4 bytes)')
+    parser.add_argument('--skew1', help='Skew1 class name (4 bytes)')
+    parser.add_argument('--gbg', help='GBG class name (4 bytes)')
+    parser.add_argument('--data', help='Data key class name (4 bytes)')
+    parser.add_argument('--pw', help='Custom password to hash & encrypt for every user found')
 
     args = parser.parse_args()
 
     if args.reg:
         domain = LMDomain(reg_file=args.reg, jd=args.jd, skew1=args.skew1, gbg=args.gbg, data=args.data, pw=args.pw)
-    elif args.sys32_config:
-        config_path = Path(args.sys32_config)
+    elif args.hive:
+        config_path = Path(args.hive)
         domain = LMDomain(sam_hive_path=config_path / 'SAM', pw=args.pw, **get_class_names(config_path / 'SYSTEM'))
     else:
-        raise ValueError('Either --reg or --sys32-config must be provided.')
+        raise ValueError('Either --reg or --hive must be provided.')
 
     print(domain)
