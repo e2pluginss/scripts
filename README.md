@@ -18,7 +18,7 @@ What I call an «LSA key» (don't confuse it with an LSA secret) is split into f
     $B = JD_{class} \mathbin\Vert Skew1_{class} \mathbin\Vert GBG_{class} \mathbin\Vert Data_{class}$  
     $shuffle(B_i,\{8, 5, 4, 2, 11, 9, 13, 3, 0, 6, 1, 12, 14, 10, 15, 7\})$
 
-*Might be useful in computer forensics.*
+*Might be useful in computer forensics.* **Watch a full explanation on [YouTube](https://youtu.be/Hq_RgcYL9_k).**
 
 **To run the script, use the following command:**
 
