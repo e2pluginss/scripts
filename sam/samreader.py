@@ -5,11 +5,12 @@ from pathlib import Path
 
 from Cryptodome.Cipher import DES, AES
 from Cryptodome.Hash import MD4
+
 # noinspection PyPackageRequirements
 from Registry import Registry
 from termcolor import colored
 
-from sam.utils import ft2dt
+from utils import ft2dt
 
 # Entry Structure (ES)
 class ES:
@@ -400,7 +401,7 @@ class ResetData:
             ) +
             '\n'.join(
                 [
-                    f'❓ {question["question"]}\n💡 {question["answer"]}\n'
+                    f'❓ {question['question']}\n💡 {question['answer']}\n'
                     for question in self.questions
                 ]
             )
@@ -508,7 +509,7 @@ class LMDomain:
         elif reg_file:
             self.load_from_reg_dump(reg_file)
         else:
-            raise ValueError("Either reg_file or sam_hive_file must be provided.")
+            raise ValueError('Either reg_file or sam_hive_file must be provided.')
 
         self.acquire_boot_key(jd, skew1, gbg, data)
         self.decrypt_hash()
@@ -520,19 +521,19 @@ class LMDomain:
         sam = Registry.Registry(hive_file)
 
         # Read the domain data
-        domain_key = sam.open("SAM\\Domains\\Account")
+        domain_key = sam.open('SAM\\Domains\\Account')
 
         try:
-            f_value = domain_key.value("F").value()
+            f_value = domain_key.value('F').value()
         except Registry.RegistryValueNotFoundException:
-            print("F value not found in SAM\\Domains\\Account")
+            print('F value not found in SAM\\Domains\\Account')
             return
 
         # Store domain data
         self.fd = Fd(f_value)
 
         # Now read user accounts
-        users_key = sam.open("SAM\\Domains\\Account\\Users")
+        users_key = sam.open('SAM\\Domains\\Account\\Users')
 
         for user_subkey in users_key.subkeys():
             rid_str = user_subkey.name()
@@ -544,31 +545,31 @@ class LMDomain:
             data = {}
 
             try:
-                v_value = user_subkey.value("V").value()
+                v_value = user_subkey.value('V').value()
                 data['V'] = v_value
             except Registry.RegistryValueNotFoundException:
                 continue  # Skip users without 'V' value
 
             try:
-                f_value = user_subkey.value("F").value()
+                f_value = user_subkey.value('F').value()
                 data['F'] = f_value
             except Registry.RegistryValueNotFoundException:
                 continue  # Skip users without 'F' value
 
             try:
-                hint_value = user_subkey.value("UserPasswordHint").value()
+                hint_value = user_subkey.value('UserPasswordHint').value()
                 data['UserPasswordHint'] = hint_value
             except Registry.RegistryValueNotFoundException:
                 pass  # 'UserPasswordHint' is optional
 
             try:
-                reset_data_value = user_subkey.value("ResetData").value()
+                reset_data_value = user_subkey.value('ResetData').value()
                 data['ResetData'] = reset_data_value
             except Registry.RegistryValueNotFoundException:
                 pass  # 'ResetData' is optional
 
             try:
-                force_password_reset_value = user_subkey.value("ForcePasswordReset").value()
+                force_password_reset_value = user_subkey.value('ForcePasswordReset').value()
                 data['ForcePasswordReset'] = force_password_reset_value
             except Registry.RegistryValueNotFoundException:
                 pass  # 'ForcePasswordReset' is optional
@@ -769,7 +770,7 @@ class LMDomain:
                 '• || is a concatenation operator\n' +
                 '• c is the registry key ' + colored('class name', color='red', attrs=['bold']) +
                 ' (❗ hidden away in the Registry Editor)\n' +
-                '• JD, Skew1, GBG, and Data are LSA keys\n'
+                '• JD, Skew1, GBG, and Data are LSA subkeys\n'
             )
             print('To acquire the boot key class name components, you have to navigate to:')
             print(colored('\tHKEY_LOCAL_MACHINE\\SYSTEM\\CurrentControlSet\\Control\\Lsa', attrs=['bold']))
@@ -909,14 +910,14 @@ def get_class_names(system_hive: Path) -> dict[str, str]:
     with open(system_hive, 'rb') as f:
         system = Registry.Registry(f)
 
-    lsa = system.open("ControlSet001\\Control\\Lsa")
+    lsa = system.open('ControlSet001\\Control\\Lsa')
 
     # noinspection PyProtectedMember
     return {
-        "jd": lsa.subkey("JD")._nkrecord.classname(),
-        "skew1": lsa.subkey("Skew1")._nkrecord.classname(),
-        "gbg": lsa.subkey("GBG")._nkrecord.classname(),
-        "data": lsa.subkey("Data")._nkrecord.classname()
+        'jd': lsa.subkey('JD')._nkrecord.classname(),
+        'skew1': lsa.subkey('Skew1')._nkrecord.classname(),
+        'gbg': lsa.subkey('GBG')._nkrecord.classname(),
+        'data': lsa.subkey('Data')._nkrecord.classname()
     }
 
 if __name__ == '__main__':
@@ -939,8 +940,8 @@ if __name__ == '__main__':
         domain = LMDomain(reg_file=args.reg, jd=args.jd, skew1=args.skew1, gbg=args.gbg, data=args.data, pw=args.pw)
     elif args.sys32_config:
         config_path = Path(args.sys32_config)
-        domain = LMDomain(sam_hive_path=config_path / "SAM", pw=args.pw, **get_class_names(config_path / "SYSTEM"))
+        domain = LMDomain(sam_hive_path=config_path / 'SAM', pw=args.pw, **get_class_names(config_path / 'SYSTEM'))
     else:
-        raise ValueError("Either --reg or --sys32-config must be provided.")
+        raise ValueError('Either --reg or --sys32-config must be provided.')
 
     print(domain)
