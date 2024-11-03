@@ -1,14 +1,13 @@
 import argparse
-import hashcat
 import json
-
-from struct import Struct
 from binascii import unhexlify
-
-from termcolor import colored
+from pathlib import Path
 
 from Cryptodome.Cipher import DES, AES
 from Cryptodome.Hash import MD4
+# noinspection PyPackageRequirements
+from Registry import Registry
+from termcolor import colored
 
 from sam.utils import ft2dt
 
@@ -498,13 +497,18 @@ class LMUser:
 
 
 class LMDomain:
-    def __init__(self, file, jd=None, skew1=None, gbg=None, data=None, pw=None):
+    def __init__(self, reg_file=None, sam_hive_path=None, jd=None, skew1=None, gbg=None, data=None, pw=None):
         self.users = []
         self.lsa_key = [0 for _ in range(16)]
         self.boot_key = None
         self.fd = None
 
-        self.load_data(file)
+        if sam_hive_path:
+            self.load_from_sam_hive(sam_hive_path)
+        elif reg_file:
+            self.load_from_reg_dump(reg_file)
+        else:
+            raise ValueError("Either reg_file or sam_hive_file must be provided.")
 
         self.acquire_boot_key(jd, skew1, gbg, data)
         self.decrypt_hash()
@@ -512,7 +516,68 @@ class LMDomain:
         if pw is not None:
             self.encrypt_hash(pw)
 
-    def load_data(self, file):
+    def load_from_sam_hive(self, hive_file):
+        sam = Registry.Registry(hive_file)
+
+        # Read the domain data
+        domain_key = sam.open("SAM\\Domains\\Account")
+
+        try:
+            f_value = domain_key.value("F").value()
+        except Registry.RegistryValueNotFoundException:
+            print("F value not found in SAM\\Domains\\Account")
+            return
+
+        # Store domain data
+        self.fd = Fd(f_value)
+
+        # Now read user accounts
+        users_key = sam.open("SAM\\Domains\\Account\\Users")
+
+        for user_subkey in users_key.subkeys():
+            rid_str = user_subkey.name()
+            try:
+                rid = int(rid_str, 16)
+            except ValueError:
+                continue  # Skip any subkeys that are not valid RIDs
+
+            data = {}
+
+            try:
+                v_value = user_subkey.value("V").value()
+                data['V'] = v_value
+            except Registry.RegistryValueNotFoundException:
+                continue  # Skip users without 'V' value
+
+            try:
+                f_value = user_subkey.value("F").value()
+                data['F'] = f_value
+            except Registry.RegistryValueNotFoundException:
+                continue  # Skip users without 'F' value
+
+            try:
+                hint_value = user_subkey.value("UserPasswordHint").value()
+                data['UserPasswordHint'] = hint_value
+            except Registry.RegistryValueNotFoundException:
+                pass  # 'UserPasswordHint' is optional
+
+            try:
+                reset_data_value = user_subkey.value("ResetData").value()
+                data['ResetData'] = reset_data_value
+            except Registry.RegistryValueNotFoundException:
+                pass  # 'ResetData' is optional
+
+            try:
+                force_password_reset_value = user_subkey.value("ForcePasswordReset").value()
+                data['ForcePasswordReset'] = force_password_reset_value
+            except Registry.RegistryValueNotFoundException:
+                pass  # 'ForcePasswordReset' is optional
+
+            # Create LMUser instance
+            user = LMUser(rid, data)
+            self.users.append(user)
+
+    def load_from_reg_dump(self, file):
         with open(file, 'r', encoding='utf-16') as f:
             data = {}
 
@@ -840,10 +905,28 @@ class LMDomain:
         )
 
 
+def get_class_names(system_hive: Path) -> dict[str, str]:
+    with open(system_hive, 'rb') as f:
+        system = Registry.Registry(f)
+
+    lsa = system.open("ControlSet001\\Control\\Lsa")
+
+    # noinspection PyProtectedMember
+    return {
+        "jd": lsa.subkey("JD")._nkrecord.classname(),
+        "skew1": lsa.subkey("Skew1")._nkrecord.classname(),
+        "gbg": lsa.subkey("GBG")._nkrecord.classname(),
+        "data": lsa.subkey("Data")._nkrecord.classname()
+    }
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Decrypt NT/LM password hashes using boot key components.')
 
-    parser.add_argument('--reg', required=True, help='HKLM\\SAM registry export file (non-binary .reg format)')
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument('--reg', help='HKLM\\SAM registry export file (non-binary .reg format)')
+    group.add_argument('--sys32-config',
+                       help='Path to Windows\\System32\\config directory (the target system should not be currently booted)')
+
     parser.add_argument('--jd', help='LSA\\JD class name')
     parser.add_argument('--skew1', help='LSA\\Skew1 class name')
     parser.add_argument('--gbg', help='LSA\\GBG class name')
@@ -852,7 +935,12 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    domain = LMDomain(args.reg, args.jd, args.skew1, args.gbg, args.data, args.pw)
+    if args.reg:
+        domain = LMDomain(reg_file=args.reg, jd=args.jd, skew1=args.skew1, gbg=args.gbg, data=args.data, pw=args.pw)
+    elif args.sys32_config:
+        config_path = Path(args.sys32_config)
+        domain = LMDomain(sam_hive_path=config_path / "SAM", pw=args.pw, **get_class_names(config_path / "SYSTEM"))
+    else:
+        raise ValueError("Either --reg or --sys32-config must be provided.")
 
     print(domain)
-
